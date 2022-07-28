@@ -45,6 +45,52 @@ def f1_score(items):
     return np.max(fscore)
 
 
+def precision_from_sufficient_stats(items):
+    true_positives, total_gold, total_pred = list(zip(*items))
+    true_positives = np.array(true_positives)
+    total_gold = np.array(total_gold)
+    total_pred = np.array(total_pred)
+    assert (true_positives <= total_gold).all()
+    assert (true_positives <= total_pred).all()
+    try:
+        if np.sum(total_pred) == 0:
+            return 0
+        return np.sum(true_positives) / np.sum(total_pred)
+    except Exception as e:
+        print(e)
+        return 0
+
+def recall_from_sufficient_stats(items):
+    true_positives, total_gold, total_pred = list(zip(*items))
+    true_positives = np.array(true_positives)
+    total_gold = np.array(total_gold)
+    total_pred = np.array(total_pred)
+    assert (true_positives <= total_gold).all()
+    assert (true_positives <= total_pred).all()
+    try:
+        if np.sum(total_gold) == 0:
+            return 0
+        return np.sum(true_positives) / np.sum(total_gold)
+    except Exception as e:
+        print(e)
+        return 0
+
+def f1_score_from_sufficient_stats(items):
+    precision = precision_from_sufficient_stats(items)
+    recall = recall_from_sufficient_stats(items)
+    try:
+        if precision + recall == 0:
+            return 0
+        return 2 * precision * recall / (precision + recall)
+    except Exception as e:
+        print(e)
+        return 0
+
+def acc_from_sufficient_stats(items):
+    correct, total = list(zip(*items))
+    return np.sum(correct) / np.sum(total)
+
+
 def acc_all(items):
     # Only count as correct if all answers are labeled correctly for each question
     question_scoring_dict = {}

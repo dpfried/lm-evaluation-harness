@@ -48,8 +48,8 @@ class HFLM(BaseLM):
             revision=revision,
             subfolder=subfolder,
         )
-        self.check_tokenizer(tokenizer, tokenizer_name)
         self.tokenizer = tokenizer
+        self.check_tokenizer(tokenizer, tokenizer_name)
 
         self.vocab_size = self.tokenizer.vocab_size
 
@@ -127,7 +127,7 @@ class HFLM(BaseLM):
         logits returned from the model
         """
         with torch.no_grad():
-            return self.gpt2(inps)[0][:, :, :self.vocab_size]
+            return self.gpt2(inps)[0]
 
     def _model_generate(self, context, max_length, eos_token_id):
         return self.gpt2.generate(

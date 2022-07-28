@@ -373,6 +373,7 @@ class BaseLM(LM):
         return re_ord.get_original(res)
 
 
+
 class Task(abc.ABC):
     """A task represents an entire benchmark including its dataset, problems,
     answers, and evaluation methods. See BoolQ for a simple example implementation
@@ -848,6 +849,7 @@ REQUEST_RETURN_LENGTHS = {
     "loglikelihood": 2,
     "greedy_until": None,
     "loglikelihood_rolling": None,
+    "tag_tokens": None,
 }
 
 
