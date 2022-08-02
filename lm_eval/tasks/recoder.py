@@ -154,9 +154,13 @@ class Recoder(PerplexityTask):
         noised_part, all_end_parts = self.build_parts(doc)
         gold = self.tokenizer.decode([t for et in all_end_parts for t in et], clean_up_tokenization_spaces=False)
 
+        # print(gold)
+
         N = min(len(record['noised_body_tokenized']) + 1, 2048)
-        gold_labels, gold_spans = self.unnoised_to_labels(gold)
+        gold_labels, _ = self.unnoised_to_labels(gold)
         gold_labels = gold_labels[:N]
+
+        gold_spans = self.tags_to_spans(gold_labels)
 
         if self.IS_TAGGER:
             pred_labels, = results
@@ -166,25 +170,49 @@ class Recoder(PerplexityTask):
             # (full_loglikelihood, full_num_tokens),\
             #     pred = results
             pred, = results
-            pred_labels, pred_spans = self.unnoised_to_labels(pred)
+            pred_labels, _ = self.unnoised_to_labels(pred)
             pred_labels = pred_labels[:N]
+        pred_spans = self.tags_to_spans(pred_labels)
         if self.VERBOSE:
+            def decode(tokens):
+                return self.tokenizer.decode(tokens, clean_up_tokenization_spaces=False)
             print("-"*40)
-            print("original:\t", )
-            og = self.tokenizer.decode(noised_part, clean_up_tokenization_spaces=False)
-            print(og)
-            print("gold:\t", gold)
-            print("pred:\t", pred)
+            # print("original:\t", )
+            # og = decode(noised_part)
+            # print(og)
+            # print("gold:\t", gold)
+            # print("pred:\t", pred)
             print("gold edits:")
-            for ix in [0,1,2]:
-                print(f"{ix}: ", (gold_labels == ix).nonzero().flatten())
-            for start, end, label in gold_spans:
-                print(label, self.tokenizer.decode(noised_part[start:end], clean_up_tokenization_spaces=False))
+            # for ix in [0,1,2]:
+            #     print(f"{ix}: ", (gold_labels == ix).nonzero().flatten())
+            for label, (start, end) in gold_spans:
+                start_color = {
+                    self.INSERT: "\033[92m<|INS|>\033[0m",
+                    self.EDIT: '\033[93m|||',
+                    self.DELETE: '\033[91m|||'
+                }[label]
+                end_color = {
+                    self.INSERT: "",
+                    self.EDIT: '\033[0m|||',
+                    self.DELETE: '\033[0m|||',
+                }[label]
+                print(f"{self.LABEL_TO_TOKEN[label]}\n{decode(noised_part[start-8:start])}{start_color}{decode(noised_part[start:end])}{end_color}{decode(noised_part[end:end+8])}")
             print("pred edits:")
-            for ix in [0,1,2]:
-                print(f"{ix}: ", (pred_labels == ix).nonzero().flatten())
-            for start, end, label in pred_spans:
-                print(label, self.tokenizer.decode(noised_part[start:end], clean_up_tokenization_spaces=False))
+            # for ix in [0,1,2]:
+            #     print(f"{ix}: ", (pred_labels == ix).nonzero().flatten())
+            for label, (start, end) in pred_spans:
+                # print(label, self.tokenizer.decode(noised_part[start:end], clean_up_tokenization_spaces=False))
+                start_color = {
+                    self.INSERT: "\033[92m<|INS|>\033[0m",
+                    self.EDIT: '\033[93m|||',
+                    self.DELETE: '\033[91m|||'
+                }[label]
+                end_color = {
+                    self.INSERT: "",
+                    self.EDIT: '\033[0m|||',
+                    self.DELETE: '\033[0m|||',
+                }[label]
+                print(f"{self.LABEL_TO_TOKEN[label]}\n{decode(noised_part[start-8:start])}{start_color}{decode(noised_part[start:end])}{end_color}{decode(noised_part[end:end+8])}")
 
         gold_unlabels = (gold_labels != self.KEEP)
         pred_unlabels = (pred_labels != self.KEEP)
@@ -201,11 +229,28 @@ class Recoder(PerplexityTask):
         insert_f1_ss = self.compute_unlabeled_f1_sufficient_stats(gold_labels == self.INSERT, pred_labels == self.INSERT)
         edit_f1_ss = self.compute_unlabeled_f1_sufficient_stats(gold_labels == self.EDIT, pred_labels == self.EDIT)
         delete_f1_ss = self.compute_unlabeled_f1_sufficient_stats(gold_labels == self.DELETE, pred_labels == self.DELETE)
+
+        delete_edit_f1_ss = self.compute_unlabeled_f1_sufficient_stats((gold_labels == self.DELETE) | (gold_labels == self.EDIT), (pred_labels == self.DELETE) | (pred_labels == self.EDIT))
+
+        span_f1_ss = self.compute_span_f1_sufficient_stats(gold_spans, pred_spans)
+        span_keep_f1_ss = self.compute_span_f1_sufficient_stats(gold_spans, pred_spans, operation=self.KEEP)
+        span_insert_f1_ss = self.compute_span_f1_sufficient_stats(gold_spans, pred_spans, operation=self.INSERT)
+        span_edit_f1_ss = self.compute_span_f1_sufficient_stats(gold_spans, pred_spans, operation=self.EDIT)
+        span_delete_f1_ss = self.compute_span_f1_sufficient_stats(gold_spans, pred_spans, operation=self.DELETE)
+
+        gold_delete_edit_spans = set((self.DELETE if op == self.EDIT else op, span) for op, span in gold_spans)
+        pred_delete_edit_spans = set((self.DELETE if op == self.EDIT else op, span) for op, span in pred_spans)
+
+        de_all_span_f1 = self.compute_span_f1_sufficient_stats(gold_delete_edit_spans, pred_delete_edit_spans)
+        de_span_f1 = self.compute_span_f1_sufficient_stats(gold_delete_edit_spans, pred_delete_edit_spans, operation=self.DELETE)
+
+
         if self.VERBOSE:
-            print("insert_f1_ss:", edit_f1_ss)
-            print("edit_f1_ss:", edit_f1_ss)
-            print("delete_f1_ss:", delete_f1_ss)
-            print("unlabeled_f1_ss:", unlabeled_f1_ss)
+            pass
+            # print("insert_f1_ss:", edit_f1_ss)
+            # print("edit_f1_ss:", edit_f1_ss)
+            # print("delete_f1_ss:", delete_f1_ss)
+            # print("unlabeled_f1_ss:", unlabeled_f1_ss)
         
         dic = {
             "unlabeled_acc": unlabeled_acc_ss,
@@ -217,9 +262,19 @@ class Recoder(PerplexityTask):
             # "delete_recall": delete_f1_ss,
             "unlabeled_f1": unlabeled_f1_ss,
             "keep_f1": keep_f1_ss,
-            "insert_f1": insert_f1_ss,
-            "edit_f1": edit_f1_ss,
             "delete_f1": delete_f1_ss,
+            "edit_f1": edit_f1_ss,
+            "insert_f1": insert_f1_ss,
+            "de_f1": delete_edit_f1_ss,
+
+            "span_f1": span_f1_ss,
+            "span_keep_f1": span_keep_f1_ss,
+            "span_delete_f1": span_delete_f1_ss,
+            "span_edit_f1": span_edit_f1_ss,
+            "span_insert_f1": span_insert_f1_ss,
+
+            "de_span_f1": de_span_f1,
+            "de_all_span_f1": de_all_span_f1,
         }
         if not self.IS_TAGGER:
             pass
@@ -247,9 +302,19 @@ class Recoder(PerplexityTask):
             # "delete_recall": recall_from_sufficient_stats,
             "unlabeled_f1": f1_score_from_sufficient_stats,
             "keep_f1": f1_score_from_sufficient_stats,
-            "insert_f1": f1_score_from_sufficient_stats,
-            "edit_f1": f1_score_from_sufficient_stats,
             "delete_f1": f1_score_from_sufficient_stats,
+            "edit_f1": f1_score_from_sufficient_stats,
+            "insert_f1": f1_score_from_sufficient_stats,
+            "de_f1": f1_score_from_sufficient_stats,
+
+            "span_f1": f1_score_from_sufficient_stats,
+            "span_keep_f1": f1_score_from_sufficient_stats,
+            "span_delete_f1": f1_score_from_sufficient_stats,
+            "span_edit_f1": f1_score_from_sufficient_stats,
+            "span_insert_f1": f1_score_from_sufficient_stats,
+
+            "de_span_f1": f1_score_from_sufficient_stats,
+            "de_all_span_f1": f1_score_from_sufficient_stats,
         }
         if not self.IS_TAGGER:
             dic.update({
@@ -271,8 +336,48 @@ class Recoder(PerplexityTask):
         return true_positives, total_gold, total_pred
 
     @staticmethod
+    def compute_span_f1_sufficient_stats(gold, pred, operation=None):
+        gold = set(t for t in gold if operation is None or t[0] == operation)
+        pred = set(t for t in pred if operation is None or t[0] == operation)
+        true_positives = len(gold & pred)
+        total_gold = len(gold)
+        total_pred = len(pred)
+        return true_positives, total_gold, total_pred
+
+    @staticmethod
     def compute_unlabeled_acc_sufficient_stats(gold, pred):
         return (gold == pred).sum(), gold.size(0)
+
+    def tags_to_spans(self, labels: torch.LongTensor) -> List[Tuple]:
+        if isinstance(labels, torch.Tensor):
+            labels = labels.tolist()
+
+        spans: List[Tuple] = []
+        
+        # cann
+        current_op = self.KEEP
+        current_start = 0
+        for ix, op in enumerate(labels):
+            assert current_op != self.INSERT, "inserts happen at positions, don't have spans"
+            # finish the current operation
+            if op != current_op or op == self.INSERT:
+                if current_op != self.KEEP:
+                    current_span = (current_start, ix)
+                    spans.append((current_op, current_span))
+                # start the next operation (and finish, if it's an insert)
+                if op == self.INSERT:
+                    current_span = (ix, ix+1)
+                    spans.append((op, current_span))
+                    # TODO: verify that we should not be using ix + 1
+                    current_start = ix
+                    current_op = self.KEEP
+                else:
+                    current_start = ix
+                    current_op = op
+        if current_op in [self.DELETE, self.EDIT]:
+            current_span = (current_start, len(labels))
+            spans.append((current_op, current_span))
+        return spans
 
     def unnoised_to_labels(self, unnoised_str):
         tokens = self.tokenizer.tokenize(unnoised_str)
@@ -281,12 +386,15 @@ class Recoder(PerplexityTask):
         for i in range(len(tokens)):
             if tokens[i] in self.TOKEN_TO_LABEL:
                 label = self.TOKEN_TO_LABEL[tokens[i]]
-                # TODO: compute accuracy for INSERT operations
-                if label == self.INSERT_TOKEN:
-                    continue
-                if i+3 > len(tokens):
-                    continue
-                start, end = tokens[i+1:i+3]
+                if label == self.INSERT:
+                    if i+1 >= len(tokens):
+                        continue
+                    start = tokens[i+1]
+                    end = start
+                else:
+                    if i+3 >= len(tokens):
+                        continue
+                    start, end = tokens[i+1:i+3]
                 if not (start.startswith("<|pos") and end.startswith("<|pos")):
                     continue
                 start = self.parse_position(start)
@@ -295,6 +403,8 @@ class Recoder(PerplexityTask):
                 if start is None or end is None:
                     continue
                 labels[start:end+1] = label
+                # if label == self.INSERT_TOKEN:
+                #     print(label)
         return labels, spans
 
     KEEP = -1
@@ -311,6 +421,12 @@ class Recoder(PerplexityTask):
         DELETE_TOKEN: DELETE,
         EDIT_TOKEN: EDIT,
         INSERT_TOKEN: INSERT,
+    }
+
+    LABEL_TO_TOKEN = {
+        DELETE: DELETE_TOKEN,
+        EDIT: EDIT_TOKEN,
+        INSERT: INSERT_TOKEN,
     }
 
     @staticmethod

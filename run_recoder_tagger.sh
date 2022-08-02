@@ -5,7 +5,7 @@ python -u main.py \
 	--device 0 \
 	--batch_size 1 \
 	--tasks recoder_tagger \
-	--limit 10000 \
+	--limit 5000 \
 	--no_cache \
-| tee expts/finetune-17K_recoder-10K.out
+| tee expts/finetune-17K_recoder-5K.out
 

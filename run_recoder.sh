@@ -4,6 +4,6 @@ python -u main.py \
   --device 0 \
   --batch_size 1 \
   --tasks recoder \
-  --limit 10000 \
+  --limit 5000 \
   --no_cache \
-  | tee expts/epoch-2_recoder-10K.out
+  | tee expts/epoch-2_recoder-5K.out
